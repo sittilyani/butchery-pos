@@ -80,7 +80,7 @@ if ($isLoggedIn) {
         .dropdown-content a:hover{background-color:#ddd}
         .dropdown:hover .dropdown-content{display:block}
         .hamburger{display:none;background:none;border:none;cursor:pointer;padding:10px;z-index:1001;position:relative}
-        .hamburger-icon{display:block;width:25px;height:3px;background-color:#FFF;margin:5px 0;transition:all 0.3s}
+        .hamburger-icon{display:block;width:25px;height:3px;background-color:#000000;margin:5px 0;transition:all 0.3s}
         .date-time-display{font-size:0.85em;color:#000000;padding:5px 10px;background:rgba(255,255,255,0.1);border-radius:15px;white-space:nowrap}
         .main-content{margin:10px 20px}
         .main-content h2{color:#330099}

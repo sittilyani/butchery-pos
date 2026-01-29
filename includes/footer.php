@@ -2,9 +2,8 @@
 <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <link rel="stylesheet" href="../assets/fontawesome/css/all.css" type="text/css">
         <link rel="stylesheet" href="../assets/css/bootstrap.css" type="text/css">
-        <link rel="stylesheet" href="../assets/fontawesome/css/font-awesome.css" type="text/css">
         <style>
                 body {
                         margin: 0;
@@ -87,6 +86,9 @@
                                 </a>
                                 <a href="https://www.tiktok.com/@katakala.butchery?_r=1&_t=ZS-93U6K41FdI2/" target="_blank" rel="noopener noreferrer" title="LinkedIn">
                                         <i class="fab fa-tiktok"></i>
+                                </a>
+                                <a href="https://katakalarestaurant.com/home" target="_blank" rel="noopener noreferrer" title="LinkedIn">
+                                        <i class="fa fa-globe"></i>
                                 </a>
                         </div>
                 </div>

@@ -86,6 +86,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon/favicon-16x16.png">
     <link rel="manifest" href="../assets/favicon/site.webmanifest">
+    <link rel="stylesheet" href="../assets/css/bootstrap.css" type="text/css">
+    <link rel="stylesheet" href="../assets/fontawesome/css/all.css" type="text/css">
     <title><?php echo isset($page_title) ? htmlspecialchars($page_title) : 'Butchery - POS'; ?></title>
     <style>
         .container{           margin-top: 3%;        }

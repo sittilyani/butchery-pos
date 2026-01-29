@@ -238,7 +238,7 @@ if ($customer_result) {
                                      class="category-image"
                                      alt="<?php echo htmlspecialchars($category['name']); ?>">
                             <?php else: ?>
-                                <img src="../assets/images/default-category.jpg"
+                                <img src="../assets/images/Logo1-rb1.png"
                                      class="category-image"
                                      alt="<?php echo htmlspecialchars($category['name']); ?>">
                             <?php endif; ?>
@@ -707,6 +707,7 @@ $(document).ready(function() {
             </style>
             </head><body>
             <div class="receipt-header">
+                <img src="../assets/images/Logo1-rb1.png" width="562" height="444" alt="">
                 <h2>BUTCHERY POS</h2>
                 <p><strong>Receipt:</strong> ${$('#receipt_id').val()}</p>
                 <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
