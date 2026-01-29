@@ -1,0 +1,11 @@
+Create a New Project:
+In Laragon's www folder, create a subfolder like butchery-pos.
+Access it via browser: http://butchery-pos.test (Laragon auto-handles virtual hosts).
+For XAMPP: http://localhost/butchery-pos.
+
+Install Additional Tools:
+Use Composer (included in Laragon) for PHP dependencies: Run composer require ... in your project folder.
+For frontend: Download Bootstrap (CSS/JS framework) or use CDN.
+Code editor: VS Code (free) with extensions like PHP Intelephense and MySQL.
+
+Create init.sql and import
