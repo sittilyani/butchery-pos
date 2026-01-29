@@ -2,7 +2,7 @@
 $host = 'localhost';
 $username = 'root';
 $password = '';
-$database = 'methadone';
+$database = 'butchery_db';
 
 $conn = new mysqli($host, $username, $password, $database);
 

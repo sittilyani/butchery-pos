@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 session_regenerate_id(true);
 
                 // Redirect to dashboard (no role-based redirection)
-                header("Location: ../dashboard/dashboard.php");
+                header("Location: ../dashboard/orders.php");
                 exit();
             } else {
                 // Invalid password
@@ -82,14 +82,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EasyFlow-L</title>
-
-
+    <link rel="apple-touch-icon" sizes="180x180" href="../assets/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon/favicon-16x16.png">
+    <link rel="manifest" href="../assets/favicon/site.webmanifest">
+    <title><?php echo isset($page_title) ? htmlspecialchars($page_title) : 'Butchery - POS'; ?></title>
     <style>
-        .container{
-          margin-top: 7%;
-
-        }
+        .container{           margin-top: 3%;        }
 
        .grid-container {
             display: grid;
@@ -112,14 +111,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: red;
         }
         h2{
-            color: #722182;
+            color: #CC0000;
         }
         label{
-            color: #722182;
+            color: #CC0000;
             font-weight: bold;
             font-size: 22px;
             margin: 10px;
-            color: #722182;
+            color: #CC0000;
             font-family: Tahoma, Geneva, sans-serif;
         }
          input{
@@ -128,9 +127,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
              font-size: 22px;
              border-radius: 5px;
              text-align: center;
+             border-color: #CC0000;
          }
          .btn-submit{
-             background-color: #722182;
+             background-color: #CC0000;
              color: #FFFFFF;
              font-size: 22px;
              font-weight: bold;
@@ -158,8 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <div class="container-item">
                 <div class="logo">
-                    <!--<img src="../assets/images/LVCT logo- PNG.png" width="200" height="142" alt="">-->
-                    <img src="../assets/images/EasyFlow_Logo2.png" width="400" height="116" alt="">
+
+                    <img src="../assets/images/Logo1-rb1.png" width="281" height="222" alt="">
                 </div>
             </div>
             <div class="container-item">

@@ -12,7 +12,7 @@
                         font-family: Tahoma, Geneva, sans-serif;
                 }
                 .footer {
-                        background: #722182;
+                        background: #CC0000;
                         color: white;
                         height: 80px;
                         display: flex;
@@ -77,22 +77,16 @@
         <!-- Your content goes here -->
         <div class="footer">
                 <div class="footer-content">
-                        <span>EasyFlow-L: an Integrated Opioid Replacement Patient Management System - developed by LVCTHealth - Stawisha Pwani Project <?php echo date('Y');?> - &copy; LVCT@20</span>
+                        <span>Butchery-POS: Katakala Butchery & Restaurant <?php echo date('Y');?> - &copy; Bites & Barrels</span>
                         <div class="social-links">
-                                <a href="https://web.facebook.com/LVCTHealth/" target="_blank" rel="noopener noreferrer" title="Facebook">
+                                <a href="https://www.facebook.com/p/Katakala-Butchery-Restaurant-61572243312979/" target="_blank" rel="noopener noreferrer" title="Facebook">
                                         <i class="fab fa-facebook"></i>
                                 </a>
-                                <a href="https://www.youtube.com/user/TheLVCT" target="_blank" rel="noopener noreferrer" title="YouTube">
-                                        <i class="fab fa-youtube"></i>
-                                </a>
-                                <a href="https://x.com/LVCTKe" target="_blank" rel="noopener noreferrer" title="X (Twitter)">
-                                        <i class="fab fa-x-twitter"></i>
-                                </a>
-                                <a href="https://www.instagram.com/lvct_health/" target="_blank" rel="noopener noreferrer" title="Instagram">
+                                <a href="https://tiktok.com/@katakala.butchery/" target="_blank" rel="noopener noreferrer" title="Instagram">
                                         <i class="fab fa-instagram"></i>
                                 </a>
-                                <a href="https://www.linkedin.com/company/lvcthealth/" target="_blank" rel="noopener noreferrer" title="LinkedIn">
-                                        <i class="fab fa-linkedin"></i>
+                                <a href="https://www.tiktok.com/@katakala.butchery?_r=1&_t=ZS-93U6K41FdI2/" target="_blank" rel="noopener noreferrer" title="LinkedIn">
+                                        <i class="fab fa-tiktok"></i>
                                 </a>
                         </div>
                 </div>
