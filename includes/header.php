@@ -202,11 +202,11 @@ if ($isLoggedIn) {
                         <li class="dropdown">
                             <a href="#" class="dropdown-toggle">System Settings</a>
                             <div class="dropdown-content">
-                                <a href="../views/userslist.php">View Users</a>
-                                <a href="../stocks/categories.php">Add Categories</a>
-                                <a href="../stocks/view_categories.php">View Categories</a>
+                                <a href="../public/userslist.php">View Users</a>
+                                <a href="../categories/index.php">Add Categories</a>
+                                <a href="../products/index.php">Add Products</a>
                                 <a href="../staff/staffslist.php">View Staff</a>
-                                <a href="../views/view_suppliers.php">View Suppliers</a>
+                                <a href="../suppliers/index.php">View Suppliers</a>
                             </div>
                         </li>
                         <?php endif; ?>
@@ -215,9 +215,9 @@ if ($isLoggedIn) {
                         <li class="dropdown user-menu">
                             <a href="#" class="dropdown-toggle">User Account settings</a>
                             <div class="dropdown-content">
-                                <a href="../login/profile.php">Profile</a>
-                                <a href="../login/reset_password.php">Change Password</a>
-                                <a href="../login/login.php">Logout</a>
+                                <a href="../public/profile.php">Profile</a>
+                                <a href="../public/reset_password.php">Change Password</a>
+                                <a href="../public/login.php">Logout</a>
                             </div>
                         </li>
                         <?php endif; ?>
@@ -383,7 +383,7 @@ if ($isLoggedIn) {
         }
 
         function logout() {
-            window.location.href = '../login/login.php?timeout=1';
+            window.location.href = '../public/login.php?timeout=1';
         }
 
         function resetInactivityTimer() {

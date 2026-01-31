@@ -7,7 +7,7 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 include '../includes/config.php';
-
+include '../includes/header.php';
 //Display Data
 
     $search = isset($_GET['search']) ? $_GET['search'] : '';
@@ -26,9 +26,10 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Users List</title>
+    <link rel="stylesheet" href="../assets/css/bootstrap.css" type="text/css">
     <link rel="stylesheet" href="../assets/css/bootstrap.min.css" type="text/css">
     <link rel="stylesheet" href="../assets/css/tables.css" type="text/css">
-    <script src="../assets/js/bootstrap.bundle.min.js"></script>
+
 
     <style>
         :root {
@@ -307,7 +308,8 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
         </table>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+    <script src="../assets/js/bootstrap.bundle.js"></script>
+    <script src="../assets/js/bootstrap.bundle.min.js"></script>
     <script>
     // Function to export table data to Excel
         function exportToExcel() {

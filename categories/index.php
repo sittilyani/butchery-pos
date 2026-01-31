@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../includes/config.php';
+require_once '../includes/header.php'; 
 
 $result = $conn->query("SELECT * FROM categories ORDER BY name");
 $categories = $result->fetch_all(MYSQLI_ASSOC);
@@ -79,7 +80,8 @@ $categories = $result->fetch_all(MYSQLI_ASSOC);
         </table>
     </div>
 </div>
+<script src="../assets/js/bootstrap.bundle.js"></script>
+<script src="../assets/js/bootstrap.min.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

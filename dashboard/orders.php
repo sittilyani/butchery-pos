@@ -480,7 +480,7 @@ $(document).ready(function() {
     function updateTotals() {
         const total = orderItems.reduce((sum, item) => sum + parseFloat(item.total_amount), 0);
         const tax = orderItems.reduce((sum, item) => sum + parseFloat(item.tax_amount), 0);
-        const grand = total + tax;
+        const grand = total;
 
         $('#total-amount').text(total.toFixed(2));
         $('#tax-amount').text(tax.toFixed(2));
@@ -606,7 +606,7 @@ $(document).ready(function() {
                 if (response.status === 'success') {
                     showMessage(response.message, 'success');
                     setTimeout(function() {
-                        window.location.href = '../views/view_order.php';
+                        window.location.href = '../dashboard/view_order.php';
                     }, 2000);
                 } else {
                     alert('Error: ' + response.message);
@@ -707,7 +707,7 @@ $(document).ready(function() {
             </style>
             </head><body>
             <div class="receipt-header">
-                <img src="../assets/images/Logo1-rb1.png" width="562" height="444" alt="">
+                <img src="../assets/images/Logo1-rb1.png" width="70" height="55" alt="">
                 <h2>BUTCHERY POS</h2>
                 <p><strong>Receipt:</strong> ${$('#receipt_id').val()}</p>
                 <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>

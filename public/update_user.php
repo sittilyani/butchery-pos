@@ -1,5 +1,6 @@
 <?php
 include '../includes/config.php';
+include '../includes/header.php';
 
 // Retrieve user details for the specified user_id
 if (isset($_GET['id'])) {
