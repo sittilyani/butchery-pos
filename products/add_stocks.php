@@ -1,42 +1,27 @@
 <?php
 session_start();
 require_once '../includes/config.php';
-require_once '../includes/header.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id']) && !isset($_SESSION['username'])) {
+// Check if user is logged in - MOVED BEFORE HEADER
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../auth/login.php");
     exit;
 }
 
 // Get logged in user's full name
-$user_id = $_SESSION['user_id'] ?? 0;
-$full_name = "Unknown User";
-if ($user_id > 0) {
-    $user_query = $conn->prepare("SELECT full_name FROM tblusers WHERE user_id = ?");
-    $user_query->bind_param("i", $user_id);
-    $user_query->execute();
-    $user_result = $user_query->get_result();
-    if ($user_row = $user_result->fetch_assoc()) {
-        $full_name = $user_row['full_name'];
-    }
-}
+$user_id = $_SESSION['user_id'];
+$full_name = "Unknown User"; // Default fallback
 
-// Fetch active products for dropdown
-$products = [];
-$product_query = "SELECT p.id, p.name, p.category, c.name as category_name
-                  FROM products p
-                  LEFT JOIN categories c ON p.category = c.name
-                  WHERE p.is_active = 1
-                  ORDER BY p.name";
-$product_result = $conn->query($product_query);
-if ($product_result) {
-    while ($row = $product_result->fetch_assoc()) {
-        $products[] = $row;
-    }
+$user_query = $conn->prepare("SELECT full_name FROM tblusers WHERE user_id = ?");
+$user_query->bind_param("i", $user_id);
+$user_query->execute();
+$user_result = $user_query->get_result();
+if ($user_row = $user_result->fetch_assoc()) {
+    $full_name = $user_row['full_name'];
 }
+$user_query->close();
 
-// Handle form submission
+// Handle form submission - MOVED BEFORE HEADER
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_stock') {
     $product_id = (int)$_POST['product_id'];
     $transactionType = 'Receiving'; // Default for stock addition
@@ -54,12 +39,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     // Get product name
     $product_name = "";
-    foreach ($products as $product) {
-        if ($product['id'] == $product_id) {
-            $product_name = $product['name'];
-            break;
-        }
+    $product_query_single = $conn->prepare("SELECT name FROM products WHERE id = ?");
+    $product_query_single->bind_param("i", $product_id);
+    $product_query_single->execute();
+    $product_result_single = $product_query_single->get_result();
+    if ($product_row = $product_result_single->fetch_assoc()) {
+        $product_name = $product_row['name'];
     }
+    $product_query_single->close();
 
     if (empty($product_name)) {
         $_SESSION['error'] = "Invalid product selected.";
@@ -71,13 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $opening_bal = 0;
     $stock_check = $conn->query("SHOW TABLES LIKE 'stock_movements'");
     if ($stock_check->num_rows > 0) {
-        $latest_stock = $conn->query("SELECT total_qty FROM stock_movements
-                                     WHERE name = '" . $conn->real_escape_string($product_name) . "'
-                                     ORDER BY trans_date DESC LIMIT 1");
-        if ($latest_stock && $latest_stock->num_rows > 0) {
-            $stock_row = $latest_stock->fetch_assoc();
+        $latest_stock = $conn->prepare("SELECT total_qty FROM stock_movements
+                                        WHERE name = ?
+                                        ORDER BY trans_date DESC LIMIT 1");
+        $latest_stock->bind_param("s", $product_name);
+        $latest_stock->execute();
+        $latest_result = $latest_stock->get_result();
+        if ($stock_row = $latest_result->fetch_assoc()) {
             $opening_bal = (float)$stock_row['total_qty'];
         }
+        $latest_stock->close();
     }
 
     $total_qty = $opening_bal + $qty_in;
@@ -109,6 +99,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     $stmt->close();
+}
+
+// NOW include header after all redirects are done
+require_once '../includes/header.php';
+
+// Fetch active products for dropdown
+$products = [];
+$product_query = "SELECT p.id, p.name, p.category, c.name as category_name
+                  FROM products p
+                  LEFT JOIN categories c ON p.category = c.name
+                  WHERE p.is_active = 1
+                  ORDER BY p.name";
+$product_result = $conn->query($product_query);
+if ($product_result) {
+    while ($row = $product_result->fetch_assoc()) {
+        $products[] = $row;
+    }
+}
+
+// Fetch active suppliers for dropdown
+$suppliers = [];
+$supplier_query = "SELECT supplier_id, name
+                   FROM suppliers
+                   ORDER BY name";
+$supplier_result = $conn->query($supplier_query);
+if ($supplier_result) {
+    while ($row = $supplier_result->fetch_assoc()) {
+        $suppliers[] = $row;
+    }
 }
 ?>
 
@@ -169,8 +188,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Received From (Supplier/Customer) <span class="text-danger">*</span></label>
-                        <input type="text" name="received_from" class="form-control" required placeholder="e.g., Supplier Name, Customer Return">
+                        <label class="form-label">Received From/Supplier Name <span class="text-danger">*</span></label>
+                        <select name="received_from" class="form-control" required>
+                            <option value="">Select Supplier</option>
+                            <?php foreach($suppliers as $supplier): ?>
+                                <option value="<?= htmlspecialchars($supplier['name']) ?>">
+                                    <?= htmlspecialchars($supplier['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <div class="row">

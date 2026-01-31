@@ -23,7 +23,7 @@ if ($isLoggedIn) {
     if (empty($full_name) || empty($userrole)) {
         $userId = $_SESSION['user_id'];
 
-        $userQuery = "SELECT first_name, last_name, username, userrole FROM tblusers WHERE user_id = ?";
+        $userQuery = "SELECT first_name, last_name, username, userrole, full_name FROM tblusers WHERE user_id = ?";
         $stmt = $conn->prepare($userQuery);
         $stmt->bind_param('i', $userId);
         $stmt->execute();
@@ -190,11 +190,12 @@ if ($isLoggedIn) {
                         <li class="dropdown">
                             <a href="#" class="dropdown-toggle">Stock Management</a>
                             <div class="dropdown-content">
-                                <a href="../stocks/products.php">Add Products</a>
-                                <a href="../views/view_product.php">View Products</a>
-                                <a href="../stocks/addstocks.php">Add Inventory</a>
-                                <a href="../stocks/viewstocks_sum.php">View Inventory</a>
-                                <a href="../stocks/stock_taking.php">Stock Taking</a>
+                                <a href="../products/add_stocks.php">Add Stocks</a>
+                                <a href="../products/view_stocks.php">View Products</a>
+                                <a href="../products/viewstocks_sum.php">View Inventory</a>
+                                <a href="../products/stock_taking.php">Stock Taking</a>
+                                <a href="../products/add_supplier.php">Add Supplier</a>
+                                <a href="../products/view_suppliers.php">View Suppliers</a>
                             </div>
                         </li>
                         <?php endif; ?>
