@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 include('../includes/config.php');
+include('../includes/header.php');
 
 // Generate CSRF token if not exists
 if (empty($_SESSION['csrf_token'])) {
@@ -163,7 +164,7 @@ ob_end_flush();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($page_title); ?></title>
     <link rel="stylesheet" href="../assets/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/bootstrap.css" type="text/css">
     <link rel="stylesheet" href="../assets/css/forms.css" type="text/css">
     <style>
         :root {
@@ -394,9 +395,9 @@ ob_end_flush();
                 <label for="userrole">User Role</label>
                 <select class="form-control" id="userrole" name="userrole" required>
                     <?php
-                    $result = $conn->query("SELECT id, role FROM userroles");
+                    $result = $conn->query("SELECT id, userrole FROM userroles");
                     while ($row = $result->fetch_assoc()) {
-                        echo "<option value='".htmlspecialchars($row['role'])."'>".htmlspecialchars($row['role'])."</option>";
+                        echo "<option value='".htmlspecialchars($row['userrole'])."'>".htmlspecialchars($row['userrole'])."</option>";
                     }
                     ?>
                 </select>

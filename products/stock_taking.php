@@ -1,19 +1,12 @@
 <?php
-// Start output buffering
 ob_start();
 include '../includes/config.php';
-include '../includes/header.php';
 
-// Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-
-$page_title = "Stock-taking";
-
-// Ensure user is logged in
-if (!isset($_SESSION['full_name'])) {
+if (!isset($_SESSION['user_id'])) {
     while (ob_get_level()) {
         ob_end_clean();
     }
@@ -22,59 +15,87 @@ if (!isset($_SESSION['full_name'])) {
     exit;
 }
 
-$transBy = $_SESSION['full_name'] ?? 'System';
+$user_id = $_SESSION['user_id'];
+$transBy = "Unknown User";
+
+$user_query = $conn->prepare("SELECT full_name FROM tblusers WHERE user_id = ?");
+$user_query->bind_param("i", $user_id);
+$user_query->execute();
+$user_result = $user_query->get_result();
+if ($user_row = $user_result->fetch_assoc()) {
+    $transBy = $user_row['full_name'];
+}
+$user_query->close();
+
+include '../includes/header.php';
+
+$page_title = "Stock-taking";
 
 // Handle GET request (search products)
 if (isset($_GET['q'])) {
-    // Clear output buffer
     while (ob_get_level()) {
         ob_end_clean();
     }
     header('Content-Type: application/json; charset=UTF-8');
 
-    $query = "%" . $_GET['q'] . "%";
+    $searchQuery = $_GET['q'] ?? '';
 
-    $stmt = $conn->prepare("
-        SELECT s.id, s.brandname, s.productname, s.stockBalance
-        FROM stocks s
-        INNER JOIN (
-            SELECT id, MAX(transDate) as maxTransDate
-            FROM stocks
-            WHERE brandname LIKE ? OR productname LIKE ?
-            GROUP BY id
-        ) latest ON s.id = latest.id AND s.transDate = latest.maxTransDate
-        ORDER BY s.brandname
-        LIMIT 20
-    ");
-    $stmt->bind_param("ss", $query, $query);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    $products = [];
-    while ($row = $result->fetch_assoc()) {
-        $products[] = [
-            'id' => $row['id'],
-            'brandname' => $row['brandname'],
-            'productname' => $row['productname'],
-            'stockBalance' => $row['stockBalance']
-        ];
+    if (strlen($searchQuery) < 3) {
+        echo json_encode([]);
+        exit;
     }
 
-    echo json_encode($products);
-    $stmt->close();
-    $conn->close();
+    try {
+        $query = "%" . $searchQuery . "%";
+        $stmt = $conn->prepare("
+            SELECT DISTINCT name,
+                   (SELECT total_qty FROM stock_movements sm2
+                    WHERE sm2.name = sm1.name
+                    ORDER BY trans_date DESC, trans_id DESC LIMIT 1) as total_qty
+            FROM stock_movements sm1
+            WHERE name LIKE ?
+            ORDER BY (SELECT total_qty FROM stock_movements sm3
+                     WHERE sm3.name = sm1.name
+                     ORDER BY trans_date DESC, trans_id DESC LIMIT 1) = 0, name ASC
+            LIMIT 20
+        ");
+
+        if (!$stmt) {
+            throw new Exception("Prepare statement failed: " . $conn->error);
+        }
+
+        $stmt->bind_param("s", $query);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $products = [];
+        while ($row = $result->fetch_assoc()) {
+            $products[] = [
+                'id' => 0,
+                'name' => $row['name'],
+                'total_qty' => (int)$row['total_qty'] ?? 0,
+                'stockBalance' => (int)$row['total_qty'] ?? 0
+            ];
+        }
+
+        $stmt->close();
+        echo json_encode($products);
+
+    } catch (Exception $e) {
+        error_log("Error fetching products: " . $e->getMessage());
+        echo json_encode([]);
+    }
+
     exit;
 }
 
 // Handle POST request (stock adjustments)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Clear output buffer
     while (ob_get_level()) {
         ob_end_clean();
     }
     header('Content-Type: application/json; charset=UTF-8');
 
-    // Decode JSON body
     $input = file_get_contents("php://input");
     $data = json_decode($input, true);
 
@@ -87,376 +108,317 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $get_latest_stock_stmt = $conn->prepare("
-            SELECT stockID, stockBalance, expiryDate, batch
-            FROM stocks
-            WHERE id = ?
-            ORDER BY transDate DESC, stockID DESC
+            SELECT trans_id, total_qty, received_by, trans_date, expiry_date, batch_number
+            FROM stock_movements
+            WHERE name = ?
+            ORDER BY trans_date DESC, trans_id DESC
             LIMIT 1
         ");
-        $update_stock_stmt = $conn->prepare("
-            UPDATE stocks
-            SET stockBalance = ?, transDate = NOW()
-            WHERE stockID = ?
-        ");
+
         $insert_movement_stmt = $conn->prepare("
-            INSERT INTO stocks (
-                id, transactionType, productname, brandname, openingBalance,
-                quantityIn, quantityOut, receivedFrom, batch, expiryDate,
-                transBy, stockBalance, status, transDate
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'None', ?, ?, ?, ?, 'Completed', NOW())
+            INSERT INTO stock_movements (
+                transactionType, name, opening_bal, qty_in, qty_out,
+                received_from, batch_number, expiry_date, transBy, total_qty, received_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         foreach ($data as $adjustment) {
-            if (!isset($adjustment['id'], $adjustment['brandname'], $adjustment['transactionType'], $adjustment['quantity'], $adjustment['productname'])) {
+            if (!isset($adjustment['name'], $adjustment['transactionType'], $adjustment['quantity'])) {
                 throw new Exception("Invalid or missing data in one of the adjustments.");
             }
 
-            $id = (int)$adjustment['id'];
-            $brandname = $adjustment['brandname'];
-            $productname = $adjustment['productname'];
+            $name = $adjustment['name'];
             $transactionType = $adjustment['transactionType'];
             $quantity = (int)$adjustment['quantity'];
 
-            // Fetch latest stock row
-            $get_latest_stock_stmt->bind_param("i", $id);
+            $get_latest_stock_stmt->bind_param("s", $name);
             $get_latest_stock_stmt->execute();
             $stock_result = $get_latest_stock_stmt->get_result();
 
             if ($stock_result->num_rows === 0) {
-                throw new Exception("Stock not found for id: " . $id);
+                $current_stock = 0;
+                $expiry_date = null;
+                $batch_number = '';
+
+                $insert_initial_stmt = $conn->prepare("
+                    INSERT INTO stock_movements (
+                        transactionType, name, opening_bal, qty_in, qty_out,
+                        received_from, batch_number, expiry_date, transBy, total_qty, received_by
+                    ) VALUES ('Initial', ?, 0, 0, 0, ?, '', NULL, ?, 0, ?)
+                ");
+
+                $received_from = 'Stock Take';
+                $received_by = 'Stock Take';
+                $insert_initial_stmt->bind_param("ssss", $name, $received_from, $transBy, $received_by);
+                $insert_initial_stmt->execute();
+                $insert_initial_stmt->close();
+
+                $get_latest_stock_stmt->bind_param("s", $name);
+                $get_latest_stock_stmt->execute();
+                $stock_result = $get_latest_stock_stmt->get_result();
+                $stock_row = $stock_result->fetch_assoc();
+            } else {
+                $stock_row = $stock_result->fetch_assoc();
             }
 
-            $stock_row = $stock_result->fetch_assoc();
-            $stockID = (int)$stock_row['stockID'];
-            $current_stock = (int)$stock_row['stockBalance'];
-            $expiryDate = $stock_row['expiryDate'];
-            $batch = $stock_row['batch'] ?? null;
+            $current_stock = (int)$stock_row['total_qty'];
+            $expiry_date = $stock_row['expiry_date'];
+            $batch_number = $stock_row['batch_number'] ?? '';
 
-            $quantityIn = 0;
-            $quantityOut = 0;
+            $qty_in = 0;
+            $qty_out = 0;
+            $opening_bal = $current_stock;
             $new_stock = $current_stock;
             $adjustmentType = strtolower($transactionType);
 
             if (in_array($adjustmentType, ['positive adjustment', 'returns'])) {
                 $new_stock = $current_stock + $quantity;
-                $quantityIn = $quantity;
             } elseif (in_array($adjustmentType, ['expired', 'donated', 'negative adjustments', 'quarantined', 'pqm'])) {
                 $new_stock = $current_stock - $quantity;
-                $quantityOut = $quantity;
             } else {
                 throw new Exception("Invalid transaction type: " . $transactionType);
             }
 
             if ($new_stock < 0) {
-                throw new Exception("Insufficient stock for brand: $brandname. Current stock is $current_stock.");
+                throw new Exception("Insufficient stock for: $name. Current stock is $current_stock.");
             }
 
-            // Update stock
-            $update_stock_stmt->bind_param("ii", $new_stock, $stockID);
-            if (!$update_stock_stmt->execute()) {
-                throw new Exception("Failed to update stock balance for $brandname: " . $update_stock_stmt->error);
-            }
+            $received_from = 'Stock Take';
+            $received_by = 'Stock Take';
 
-            // Insert movement
-            $openingBalance = $current_stock;
             $insert_movement_stmt->bind_param(
-                "isssiiisssi",
-                $id, $transactionType, $productname, $brandname, $openingBalance,
-                $quantityIn, $quantityOut, $batch, $expiryDate, $transBy, $new_stock
+                "ssiddssssds",
+                $transactionType,
+                $name,
+                $opening_bal,
+                $qty_in,
+                $qty_out,
+                $received_from,
+                $batch_number,
+                $expiry_date,
+                $transBy,
+                $new_stock,
+                $received_by
             );
+
             if (!$insert_movement_stmt->execute()) {
-                throw new Exception("Failed to insert stock movement for $brandname: " . $insert_movement_stmt->error);
+                throw new Exception("Failed to insert stock movement: " . $insert_movement_stmt->error);
             }
         }
 
+        $get_latest_stock_stmt->close();
+        $insert_movement_stmt->close();
         $conn->commit();
-        echo json_encode(['status' => 'success', 'message' => 'All stock adjustments processed successfully.']);
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => count($data) . ' stock adjustment(s) processed successfully.'
+        ]);
 
     } catch (Exception $e) {
         $conn->rollback();
         error_log("Stock adjustment error: " . $e->getMessage());
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
-    } finally {
-        if (isset($get_latest_stock_stmt)) $get_latest_stock_stmt->close();
-        if (isset($update_stock_stmt)) $update_stock_stmt->close();
-        if (isset($insert_movement_stmt)) $insert_movement_stmt->close();
-        $conn->close();
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Error: ' . $e->getMessage()
+        ]);
     }
+
     exit;
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Taking</title>
-    <link rel="stylesheet" href="../assets/css/bootstrap.css" type="text/css">
-    <link rel="stylesheet" href="../assets/css/bootstrap.min.css" type="text/css">
-
+    <title><?= $page_title ?> - Butchery POS</title>
+    <link rel="stylesheet" href="../assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .main-content{
-
-            width: 70%;
-            padding: 30px;
-            border-radius: 10px;
-            margin-left: auto;
-            margin-right: auto;
-            background: #E5E5FF;
-
-        }
-
-        .form-content {
-            min-height: 400px;
-            border-radius: 0.5rem;
-            border: 1px solid #e5e7eb;
-            margin-top: 30px;
-            padding: 40px;
-        }
-        table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-        th, td {
-            padding: 12px 16px;
-            text-align: left;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        th {
-            background-color: #000099;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #FFFFFF;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        tr:hover {
-            background-color: #f9fafb;
-        }
-        input, select {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #d1d5db;
-            border-radius: 0.375rem;
-            font-size: 0.875rem;
-            line-height: 1.25rem;
-            transition: all 0.2s ease;
-        }
-        input:focus, select:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-        }
-        input[type="number"] {
-            width: 80px;
-        }
-        .status-message {
-            transition: opacity 0.3s ease-in-out;
-        }
-        .loading::after {
-            content: '';
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #3b82f6;
-            border-top-color: transparent;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-left: 8px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .error-message {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border: 1px solid #b91c1c;
-        }
-        .success-message {
-            background-color: #d1fae5;
-            color: #065f46;
-            border: 1px solid #065f46;
-        }
+        :root{--primary:#4361ee;--secondary:#3f37c9;--success:#06d6a0;--danger:#ef476f;--warning:#ffd60a;--dark:#2b2d42;--light:#f8f9fa;--radius:12px}
+        body{background:none;padding:20px 0}
+        .container{max-width:1200px; margin-top: 20px;}
+        .header-card,.search-card,.stock-table{background:#fff;border-radius:var(--radius);padding:25px;margin-bottom:25px;box-shadow:0 10px 30px rgba(0,0,0,.1)}
+        .header-card h1{color:var(--dark);font-weight:700;margin:0;display:flex;align-items:center;gap:12px}
+        .header-card h1 i{color:var(--primary)}
+        .search-wrapper{position:relative}
+        .search-wrapper i{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:#999;font-size:18px}
+        .search-wrapper input{padding:12px 15px 12px 45px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;transition:all .3s}
+        .search-wrapper input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(67,97,238,.1)}
+        .results-info{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:15px 20px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+        .stock-table{padding:0;overflow:hidden}
+        .table{margin:0}
+        .table thead{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff}
+        .table thead th{padding:15px;font-weight:600;border:none}
+        .table tbody td{padding:15px;vertical-align:middle}
+        .stock-indicator{padding:6px 12px;border-radius:20px;font-weight:600;font-size:14px;display:inline-block}
+        .stock-indicator.in-stock{background:#d4edda;color:#155724}
+        .stock-indicator.low-stock{background:#fff3cd;color:#856404}
+        .stock-indicator.out-of-stock{background:#f8d7da;color:#721c24}
+        .empty-state{text-align:center;padding:60px 20px!important;color:#999}
+        .empty-state i{font-size:64px;margin-bottom:20px;opacity:.5}
+        .empty-state h3{color:var(--dark);margin-bottom:10px}
+        .btn-submit{background:linear-gradient(135deg,var(--success),#05b48f);color:#fff;padding:12px 30px;border:none;border-radius:8px;font-weight:600;font-size:16px;transition:all .3s;box-shadow:0 4px 15px rgba(6,214,160,.3)}
+        .btn-submit:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(6,214,160,.4)}
+        .btn-submit:disabled{opacity:.6;cursor:not-allowed}
+        .status-message{padding:15px 20px;border-radius:8px;margin-bottom:20px;font-weight:500;display:none}
+        .status-message.success-message{background:#d4edda;color:#155724;border-left:4px solid var(--success)}
+        .status-message.error-message{background:#f8d7da;color:#721c24;border-left:4px solid var(--danger)}
+        .form-select,.form-control{border:2px solid #e0e0e0;border-radius:6px;transition:all .3s}
+        .form-select:focus,.form-control:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(67,97,238,.1)}
     </style>
 </head>
 <body>
-    <div class="main-content">
-        <h1>Stock Taking & Adjustments</h1>
-        <div class="">
-            <label for="search" class="text-base sm:text-lg font-medium text-gray-700">Search Products:</label>
-            <input type="text" id="search" placeholder="Search by product or brand name..." class="flex-grow p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150 ease-in-out">
+    <div class="container">
+        <div class="header-card">
+            <h1><i class="fas fa-clipboard-check"></i>Stock Taking & Adjustments</h1>
+            <p class="text-muted mb-0 mt-2">Search for products and make stock adjustments</p>
         </div>
-        <div id="status-message" class="mb-4 p-3 rounded-lg font-semibold hidden status-message"></div>
-        <form id="stock-adjustment-form" class="form-content">
-            <div class="table-container">
-                <table>
+        <div class="search-card">
+            <div class="search-wrapper">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" class="form-control" placeholder="Search products... (minimum 3 characters)" autocomplete="off">
+            </div>
+        </div>
+        <div id="statusMessage" class="status-message"></div>
+        <div id="resultsInfo" class="results-info" style="display:none">
+            <span><i class="fas fa-box-open me-2"></i><span id="resultsCount">0</span> products found</span>
+            <span>Logged in as: <strong><?= htmlspecialchars($transBy) ?></strong></span>
+        </div>
+        <form id="stockForm" method="POST">
+            <div class="stock-table">
+                <table class="table table-hover mb-0">
                     <thead>
                         <tr>
                             <th>Product Name</th>
-                            <th>Brand Name</th>
-                            <th>Current Stock</th>
-                            <th>Adjustment Type</th>
-                            <th>Quantity</th>
+                            <th style="width:150px">Current Stock</th>
+                            <th style="width:250px">Adjustment Type</th>
+                            <th style="width:150px">Quantity</th>
                         </tr>
                     </thead>
-                    <tbody id="product-table-body">
+                    <tbody id="productTableBody">
                         <tr>
-                            <td colspan="5" class="px-6 py-4 text-center text-gray-500">Search for a product to begin.</td>
+                            <td colspan="4" class="empty-state">
+                                <i class="fas fa-search"></i>
+                                <h3>Start Searching</h3>
+                                <p>Enter a product name above to begin stock taking</p>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-            <div class="flex justify-end mt-6">
-                <button type="submit" style="background: #000099; width: 200px; color: #FFFFFF; margin-top: 30px; padding: 15px; border: none; border-radius: 5px;">
-                    Submit Adjustments
+            <div class="text-end mt-4">
+                <button type="submit" class="btn btn-submit">
+                    <i class="fas fa-check-circle me-2"></i>Process Adjustments
                 </button>
             </div>
         </form>
     </div>
-    <script src="../assets/js/bootstrap.bundle.js"></script>
-    <script src="../assets/js/bootstrap.min.js"></script>
-
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="../assets/js/bootstrap.bundle.min.js"></script>
     <script>
-        $(document).ready(function() {
-            const searchInput = $('#search');
-            const productTableBody = $('#product-table-body');
-            const form = $('#stock-adjustment-form');
-            const statusMessage = $('#status-message');
-
-            // Fetches product data from the server
-            const fetchProducts = async (query) => {
-                if (query.length < 3) {
-                    productTableBody.html('<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Enter at least 3 characters to search.</td></tr>');
+        $(document).ready(function(){
+            const searchInput=$('#searchInput'),productTableBody=$('#productTableBody'),form=$('#stockForm'),statusMessage=$('#statusMessage'),resultsInfo=$('#resultsInfo'),resultsCount=$('#resultsCount');
+            const getStockClass=qty=>qty>10?'in-stock':qty>0?'low-stock':'out-of-stock';
+            const fetchProducts=async query=>{
+                if(!query||query.length<3){
+                    productTableBody.html('<tr><td colspan="4" class="empty-state"><i class="fas fa-search"></i><h3>Start Searching</h3><p>Enter at least 3 characters to search</p></td></tr>');
+                    resultsInfo.hide();
                     return;
                 }
-                productTableBody.html('<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500 loading">Loading products...</td></tr>');
-                try {
-                    const response = await fetch(`${window.location.href}?q=${encodeURIComponent(query)}`);
-                    const responseText = await response.text();
-                    console.log('Raw API response:', responseText);
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}. Response: ${responseText}`);
-                    }
-
-                    const products = JSON.parse(responseText);
+                try{
+                    productTableBody.html('<tr><td colspan="4" class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Searching...</h3><p>Please wait</p></td></tr>');
+                    const response=await fetch(`?q=${encodeURIComponent(query)}`,{headers:{'X-Requested-With':'XMLHttpRequest'}});
+                    if(!response.ok)throw new Error(`HTTP error! Status: ${response.status}`);
+                    const products=await response.json();
                     renderProducts(products);
-                } catch (error) {
-                    console.error('Error fetching products:', error);
-                    productTableBody.html(`<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Error: ${error.message}</td></tr>`);
+                }catch(error){
+                    console.error('Fetch error:',error);
+                    productTableBody.html(`<tr><td colspan="4" class="empty-state"><i class="fas fa-exclamation-triangle text-danger"></i><h3>Error Loading Products</h3><p>${error.message}</p></td></tr>`);
+                    resultsInfo.hide();
                 }
             };
-
-            // Renders the product table with dynamic input fields
-            const renderProducts = (products) => {
-                productTableBody.html('');
-                if (products.length === 0) {
-                    productTableBody.html('<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">No products found.</td></tr>');
+            const renderProducts=products=>{
+                if(!Array.isArray(products)||products.length===0){
+                    productTableBody.html('<tr><td colspan="4" class="empty-state"><i class="fas fa-inbox"></i><h3>No Products Found</h3><p>Try adjusting your search terms</p></td></tr>');
+                    resultsInfo.hide();
                     return;
                 }
-                products.forEach(product => {
-                    const row = `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 text-sm font-medium text-gray-900">${product.productname}</td>
-                            <td class="px-6 py-4 text-sm text-gray-500">${product.brandname}</td>
-                            <td class="px-6 py-4 text-sm text-gray-500">${product.stockBalance}</td>
-                            <td class="px-6 py-4 text-sm text-gray-500">
-                                <select name="transactionType" class="p-2 border rounded-md focus:ring-2 focus:ring-blue-500">
-                                    <option value="">Select</option>
-                                    <option value="Expired">Expired</option>
-                                    <option value="Donated">Donated</option>
-                                    <option value="Negative Adjustments">Negative Adjustments</option>
-                                    <option value="Quarantined">Quarantined</option>
-                                    <option value="PQM">PQM</option>
-                                    <option value="Positive Adjustment">Positive Adjustment</option>
-                                    <option value="Returns">Returns</option>
-                                </select>
-                            </td>
-                            <td class="px-6 py-4 text-sm text-gray-500">
-                                <input type="number" name="quantity" min="1" class="w-20 p-2 border rounded-md focus:ring-2 focus:ring-blue-500" placeholder="Qty">
-                                <input type="hidden" name="id" value="${product.id}">
-                                <input type="hidden" name="brandname" value="${product.brandname}">
-                                <input type="hidden" name="productname" value="${product.productname}">
-                            </td>
-                        </tr>
-                    `;
-                    productTableBody.append(row);
+                let tableHTML='';
+                products.forEach(product=>{
+                    const stockClass=getStockClass(product.total_qty||0);
+                    const stockText=product.total_qty||0;
+                    tableHTML+=`<tr><td><div class="fw-bold">${product.name}</div></td><td><span class="stock-indicator ${stockClass}">${stockText}</span></td><td><select name="transactionType" class="form-select" required><option value="">Select Adjustment</option><option value="Expired">Expired</option><option value="Donated">Donated</option><option value="Negative Adjustments">Negative Adjustments</option><option value="Quarantined">Quarantined</option><option value="PQM">PQM</option><option value="Positive Adjustment">Positive Adjustment</option><option value="Returns">Returns</option></select></td><td><div class="d-flex align-items-center gap-2"><input type="number" name="quantity" min="1" class="form-control" placeholder="Qty" style="width:100px" required><input type="hidden" name="id" value="${product.id||0}"><input type="hidden" name="name" value="${product.name}"></div></td></tr>`;
                 });
+                productTableBody.html(tableHTML);
+                resultsCount.text(products.length);
+                resultsInfo.show();
             };
-
-            // Search input handler with debounce
             let searchTimeout;
-            searchInput.on('input', function() {
+            searchInput.on('input',function(){
                 clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => {
-                    fetchProducts(searchInput.val().trim());
-                }, 1000);
+                const query=searchInput.val().trim();
+                searchTimeout=setTimeout(()=>{fetchProducts(query);},500);
             });
-
-            // Form submission handler to process adjustments
-            form.on('submit', async function(event) {
+            form.on('submit',async function(event){
                 event.preventDefault();
-                const rows = productTableBody.find('tr');
-                const adjustments = [];
-
-                rows.each(function() {
-                    const id = $(this).find('input[name="id"]').val();
-                    const brandname = $(this).find('input[name="brandname"]').val();
-                    const productname = $(this).find('input[name="productname"]').val();
-                    const transactionType = $(this).find('select[name="transactionType"]').val();
-                    const quantity = $(this).find('input[name="quantity"]').val();
-
-                    if (id && brandname && productname && transactionType && quantity && parseInt(quantity) > 0) {
-                        adjustments.push({ id, brandname, productname, transactionType, quantity: parseInt(quantity) });
+                const rows=productTableBody.find('tr');
+                const adjustments=[];
+                let hasAdjustments=false;
+                rows.each(function(){
+                    const name=$(this).find('input[name="name"]').val();
+                    const transactionType=$(this).find('select[name="transactionType"]').val();
+                    const quantity=$(this).find('input[name="quantity"]').val();
+                    if(name&&transactionType&&quantity&&parseInt(quantity)>0){
+                        adjustments.push({name,transactionType,quantity:parseInt(quantity)});
+                        hasAdjustments=true;
                     }
                 });
-
-                if (adjustments.length === 0) {
-                    showMessage('Please enter at least one valid adjustment.', 'error');
+                if(!hasAdjustments){
+                    showMessage('Please select at least one product and enter a valid adjustment.','error');
                     return;
                 }
-
-                try {
-                    const response = await fetch(window.location.href, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(adjustments)
-                    });
-
-                    const responseText = await response.text();
-                    console.log('Raw API response:', responseText);
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}. Response: ${responseText}`);
+                const submitBtn=form.find('button[type="submit"]');
+                const originalText=submitBtn.html();
+                submitBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>Processing...').prop('disabled',true);
+                try{
+                    const response=await fetch(window.location.href,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify(adjustments)});
+                    if(!response.ok)throw new Error(`HTTP error! Status: ${response.status}`);
+                    const result=await response.json();
+                    if(result.status==='success'){
+                        showMessage(result.message,'success');
+                        const currentQuery=searchInput.val().trim();
+                        if(currentQuery.length>=3){
+                            fetchProducts(currentQuery);
+                        }else{
+                            searchInput.val('');
+                            productTableBody.html('<tr><td colspan="4" class="empty-state"><i class="fas fa-check-circle text-success"></i><h3>Adjustments Successful!</h3><p>Stock has been updated. Search for more products to make additional adjustments.</p></td></tr>');
+                            resultsInfo.hide();
+                        }
+                    }else{
+                        showMessage(result.message,'error');
                     }
-
-                    const result = JSON.parse(responseText);
-
-                    if (result.status === 'success') {
-                        showMessage('Stock updated successfully!', 'success');
-                        form[0].reset();
-                        searchInput.val('');
-                        productTableBody.html('<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Search for a product to begin.</td></tr>');
-                    } else {
-                        showMessage(result.message, 'error');
-                    }
-                } catch (error) {
-                    console.error('Submission error:', error);
-                    showMessage('An unexpected error occurred: ' + error.message, 'error');
+                }catch(error){
+                    console.error('Submission error:',error);
+                    showMessage('An unexpected error occurred: '+error.message,'error');
+                }finally{
+                    submitBtn.html(originalText).prop('disabled',false);
                 }
             });
-
-            // Helper function to display status messages
-            const showMessage = (message, type) => {
-                statusMessage.text(message);
-                statusMessage.removeClass('error-message success-message')
-                    .addClass(type === 'success' ? 'success-message' : 'error-message');
-                statusMessage.fadeIn().delay(5000).fadeOut();
+            const showMessage=(message,type)=>{
+                statusMessage.text(message).removeClass('success-message error-message').addClass(type==='success'?'success-message':'error-message').slideDown();
+                if(type==='success'){
+                    setTimeout(()=>{statusMessage.slideUp();},5000);
+                }
             };
+            searchInput.focus();
+            searchInput.on('keydown',function(e){
+                if(e.key==='Enter'){
+                    e.preventDefault();
+                    fetchProducts($(this).val().trim());
+                }
+            });
         });
     </script>
 </body>

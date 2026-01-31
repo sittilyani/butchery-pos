@@ -1,330 +1,281 @@
 <?php
 session_start();
 
-// Check if the user is not logged in, redirect to login page
 if (!isset($_SESSION['user_id'])) {
     header("location: ../public/login.php");
     exit;
 }
+
 include '../includes/config.php';
 include '../includes/header.php';
-//Display Data
 
-    $search = isset($_GET['search']) ? $_GET['search'] : '';
-    $sql = "SELECT * FROM tblusers
-            WHERE (user_id LIKE '%$search%' OR first_name LIKE '%$search%' OR last_name LIKE '%$search%' OR sex LIKE '%$search%' OR mobile LIKE '%$search%' OR userrole LIKE '%$search%')
-            LIMIT 10";
-// Fetch user data from the database
-$sql = "SELECT * FROM tblusers";
-$result = $conn->query($sql);
-$users = $result->fetch_all(MYSQLI_ASSOC);
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+// Check if is_active column exists, if not add it
+$column_check = $conn->query("SHOW COLUMNS FROM tblusers LIKE 'is_active'");
+if ($column_check->num_rows == 0) {
+    $conn->query("ALTER TABLE tblusers ADD COLUMN is_active TINYINT(1) DEFAULT 1");
+}
+
+if (!empty($search)) {
+    $stmt = $conn->prepare("SELECT * FROM tblusers
+                           WHERE user_id LIKE ? OR first_name LIKE ? OR last_name LIKE ?
+                           OR gender LIKE ? OR full_name LIKE ? OR mobile LIKE ? OR userrole LIKE ?
+                           ORDER BY date_created DESC LIMIT 50");
+    $search_param = "%$search%";
+    $stmt->bind_param("sssssss", $search_param, $search_param, $search_param, $search_param, $search_param, $search_param, $search_param);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $users = $result->fetch_all(MYSQLI_ASSOC);
+} else {
+    $result = $conn->query("SELECT * FROM tblusers ORDER BY date_created DESC");
+    $users = $result->fetch_all(MYSQLI_ASSOC);
+}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Users List</title>
-    <link rel="stylesheet" href="../assets/css/bootstrap.css" type="text/css">
-    <link rel="stylesheet" href="../assets/css/bootstrap.min.css" type="text/css">
-    <link rel="stylesheet" href="../assets/css/tables.css" type="text/css">
-
-
+    <title>Users List - Butchery POS</title>
+    <link rel="stylesheet" href="../assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --primary-color: #3498db;
-            --secondary-color: #2980b9;
-            --danger-color: #e74c3c;
-            --success-color: #2ecc71;
-            --warning-color: #f39c12;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --border-color: #dee2e6;
+        :root{--primary:#3498db;--secondary:#2980b9;--danger:#e74c3c;--success:#2ecc71;--warning:#f39c12;--light:#f8f9fa;--dark:#343a40;--border:#dee2e6}
+        body{padding:20px 0}
+        .users-container{max-width:90%;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.1);padding:30px;overflow:hidden}
+        .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;padding-bottom:20px;border-bottom:2px solid var(--border);flex-wrap:wrap;gap:15px}
+        .page-header h4{color:var(--dark);font-weight:700;margin:0;display:flex;align-items:center;gap:10px}
+        .page-header h4 i{color:var(--primary);font-size:1.3em}
+        .header-actions{display:flex;gap:10px;flex-wrap:wrap}
+        .btn-add-user{background:linear-gradient(135deg,var(--success),#27ae60);color:#fff;padding:10px 20px;border:none;border-radius:8px;font-weight:600;display:flex;align-items:center;gap:8px;transition:all .3s;box-shadow:0 4px 15px rgba(46,204,113,.3);text-decoration:none}
+        .btn-add-user:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(46,204,113,.4);color:#fff}
+        .search-section{background:linear-gradient(135deg,#f5f7fa,#c3cfe2);padding:20px;border-radius:8px;margin-bottom:25px}
+        .search-wrapper{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+        .search-wrapper input[type="text"]{flex:1;min-width:250px;padding:10px 15px;border:2px solid var(--border);border-radius:6px;font-size:15px;transition:all .3s}
+        .search-wrapper input[type="text"]:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(52,152,219,.1);outline:none}
+        .search-btn,.cancel-btn,.export-btn{padding:10px 20px;border:none;border-radius:6px;font-weight:600;cursor:pointer;transition:all .3s;display:flex;align-items:center;gap:8px}
+        .search-btn{background:var(--primary);color:#fff}
+        .search-btn:hover{background:var(--secondary);transform:translateY(-1px)}
+        .cancel-btn{background:#6c757d;color:#fff}
+        .cancel-btn:hover{background:#5a6268}
+        .export-btn{background:var(--warning);color:#fff}
+        .export-btn:hover{background:#e67e22}
+        .user-count{background:#fff;padding:10px 15px;border-radius:6px;font-weight:600;color:var(--danger)}
+        .table-wrapper{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+        table{width:100%;margin:0;font-size:.9rem;border-collapse:collapse}
+        thead{background:linear-gradient(135deg,#1a2a6c,#2b5876);color:#fff}
+        thead th{padding:15px 12px;text-align:left;font-weight:600;text-transform:uppercase;font-size:.75rem;letter-spacing:.5px;white-space:nowrap}
+        tbody td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle}
+        tbody tr:hover{background:rgba(52,152,219,.05)}
+        tbody tr:nth-child(even){background:rgba(0,0,0,.01)}
+        .action-btns{display:flex;flex-wrap:wrap;gap:5px}
+        .btn-sm{padding:6px 12px;border-radius:4px;font-size:.75rem;font-weight:500;transition:all .2s;display:inline-flex;align-items:center;gap:5px;border:none;cursor:pointer;text-decoration:none}
+        .btn-sm i{font-size:.7rem}
+        .btn-update{background:var(--warning);color:#fff}
+        .btn-update:hover{background:#e67e22;transform:translateY(-1px);color:#fff}
+        .btn-delete{background:var(--danger);color:#fff}
+        .btn-delete:hover{background:#c0392b;transform:translateY(-1px);color:#fff}
+        .btn-view{background:var(--success);color:#fff}
+        .btn-view:hover{background:#27ae60;transform:translateY(-1px);color:#fff}
+        .btn-reset{background:#17a2b8;color:#fff}
+        .btn-reset:hover{background:#138496;transform:translateY(-1px);color:#fff}
+        .alert{padding:15px 20px;border-radius:8px;margin-bottom:20px;border-left:4px solid;animation:slideIn .3s ease}
+        .alert-success{background:#d4edda;color:#155724;border-color:var(--success)}
+        .alert-danger{background:#f8d7da;color:#721c24;border-color:var(--danger)}
+        @keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+        @media (max-width:768px){
+            .page-header{flex-direction:column;align-items:flex-start}
+            .search-wrapper{flex-direction:column;align-items:stretch}
+            .search-wrapper input[type="text"]{min-width:100%}
+            .table-wrapper{overflow-x:auto}
+            table{min-width:800px}
         }
-
-        .users {
-            max-width: 100%;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
-            padding: 30px;
-            overflow: hidden;
-        }
-
-        .users h2 {
-            color: var(--dark-color);
-            font-weight: 700;
-            margin-bottom: 25px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-        }
-
-        .users h2 i {
-            margin-right: 10px;
-            color: var(--primary-color);
-        }
-
-        table {
-            width: 100%;
-            margin-top: 20px;
-            font-size: 0.9rem;
-        }
-
-        thead {
-            background: linear-gradient(135deg, #1a2a6c, #2b5876);;
-            color: white;
-        }
-
-        th {
-            padding: 15px;
-            text-align: left;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.8rem;
-            letter-spacing: 0.5px;
-        }
-
-        td {
-            padding: 12px 15px;
-            border-bottom: 1px solid var(--border-color);
-            vertical-align: middle;
-        }
-
-        tbody tr:hover {
-            background-color: rgba(52, 152, 219, 0.05);
-        }
-        h4{
-            color: linear-gradient(135deg, #1a2a6c, #2b5876);
-        }
-
-        .btn {
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            margin-right: 5px;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .btn i {
-            margin-right: 5px;
-            font-size: 0.8rem;
-        }
-
-        .btn-update {
-            background-color: var(--warning-color);
-            color: white;
-            border: none;
-        }
-
-        .btn-update:hover {
-            background-color: #e67e22;
-            transform: translateY(-1px);
-        }
-
-        .btn-delete {
-            background-color: var(--danger-color);
-            color: white;
-            border: none;
-        }
-
-        .btn-delete:hover {
-            background-color: #c0392b;
-            transform: translateY(-1px);
-        }
-
-        .btn-view {
-            background-color: var(--success-color);
-            color: white;
-            border: none;
-        }
-
-        .btn-view:hover {
-            background-color: #27ae60;
-            transform: translateY(-1px);
-        }
-
-        .action-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-
-        /* Responsive table */
-        @media (max-width: 768px) {
-            table {
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-
-            .btn {
-                margin-bottom: 5px;
-            }
-
-            .action-buttons {
-                flex-direction: column;
-            }
-        }
-
-        /* Status indicators */
-        .status-active {
-            color: var(--success-color);
-            font-weight: 600;
-        }
-
-        .status-inactive {
-            color: var(--danger-color);
-            font-weight: 600;
-        }
-
-        /* Add user button */
-        .add-user-btn {
-            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            display: inline-flex;
-            align-items: center;
-            transition: all 0.3s ease;
-        }
-
-        .add-user-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
-            color: white;
-        }
-
-        .add-user-btn i {
-            margin-right: 8px;
-        }
-
-        /* Table row animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        tbody tr {
-            animation: fadeIn 0.3s ease forwards;
-        }
-
-        tbody tr:nth-child(odd) {
-            background-color: rgba(0, 0, 0, 0.01);
+        @media print{
+            body{background:#fff}
+            .users-container{box-shadow:none}
+            .search-section,.btn-add-user,.action-btns,.header-actions{display:none!important}
         }
     </style>
 </head>
 <body>
-    <div class="users">
-        <h4><i class="fas fa-users"></i>&nbsp;&nbsp;&nbsp;Authorized Users </h4>
+    <div class="users-container">
+        <div class="page-header">
+            <h4><i class="fas fa-users-cog"></i>Authorized Users</h4>
+            <div class="header-actions">
+                <a href="user_registration.php" class="btn-add-user">
+                    <i class="fas fa-user-plus"></i>Add New User
+                </a>
+            </div>
+        </div>
 
         <?php if (isset($_GET['success'])): ?>
-            <div class="alert alert-success" role="alert">
-                <?php echo htmlspecialchars($_GET['success']); ?>
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle me-2"></i><?= htmlspecialchars($_GET['success']) ?>
             </div>
         <?php endif; ?>
+
         <?php if (isset($_GET['error'])): ?>
-            <div class="alert alert-danger" role="alert">
-                <?php echo htmlspecialchars($_GET['error']); ?>
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($_GET['error']) ?>
             </div>
         <?php endif; ?>
-        <form id="searchForm" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="GET">
-    <div class="header">
-        <label for="search">Search:</label>
-        <input type="text" id="search" class="search-entry" name="search" value="<?php echo isset($_GET['search']) ? $_GET['search'] : ''; ?>">
-        <input type="submit" value="Search" class="search-input">
-        <button type="button" onclick="cancelSearch()" class="cancel-input">Cancel</button> <!-- Add Cancel Button -->
 
-        <!-- Label for printing to PDF -->
-        <label for="print-pdf"></label>
-        <button id="print-pdf" onclick="window.print()">Print PDF</button>
+        <div class="search-section">
+            <form method="GET" action="<?= htmlspecialchars($_SERVER["PHP_SELF"]) ?>">
+                <div class="search-wrapper">
+                    <input type="text" name="search" placeholder="Search by ID, name, gender, mobile, or role..."
+                           value="<?= htmlspecialchars($search) ?>" autocomplete="off">
+                    <button type="submit" class="search-btn">
+                        <i class="fas fa-search"></i>Search
+                    </button>
+                    <?php if(!empty($search)): ?>
+                        <button type="button" onclick="window.location.href='userslist.php'" class="cancel-btn">
+                            <i class="fas fa-times"></i>Clear
+                        </button>
+                    <?php endif; ?>
+                    <button type="button" onclick="window.print()" class="export-btn">
+                        <i class="fas fa-print"></i>Print
+                    </button>
+                    <button type="button" onclick="exportToExcel()" class="export-btn">
+                        <i class="fas fa-file-excel"></i>Excel
+                    </button>
+                    <div class="user-count">
+                        <i class="fas fa-user-check me-1"></i>Active: <?php include '../counts/users_count.php'; ?>
+                    </div>
+                </div>
+            </form>
+        </div>
 
-        <!-- Label for exporting to Excel -->
-        <label for="export-excel"></label>
-        <button id="export-excel" onclick="exportToExcel()">Export to Excel</button>
-
-        Active:&nbsp;&nbsp;<span style="font-weight: normal; color: red;" ><?php include '../counts/users_count.php'; ?></span><br>
-
-    </div>
-    </form>
-        <table class="table-responsive">
-            <thead>
-                <tr>
-                    <th>User ID</th>
-                    <th>Username</th>
-                    <th>First Name</th>
-                    <th>Last Name</th>
-                    <th>Full Name</th>
-                    <th>Email</th>
-                    <th>Gender</th>
-                    <th>Mobile</th>
-                    <th>User Role</th>
-                    <th>Date Created</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($users as $user) : ?>
+        <div class="table-wrapper">
+            <table>
+                <thead>
                     <tr>
-                        <td><?php echo htmlspecialchars($user['user_id']); ?></td>
-                        <td><?php echo htmlspecialchars($user['username']); ?></td>
-                        <td><?php echo htmlspecialchars($user['first_name']); ?></td>
-                        <td><?php echo htmlspecialchars($user['last_name']); ?></td>
-                        <td><?php echo htmlspecialchars($user['full_name']); ?></td>
-                        <td><?php echo htmlspecialchars($user['email']); ?></td>
-                        <td><?php echo htmlspecialchars($user['gender']); ?></td>
-                        <td><?php echo htmlspecialchars($user['mobile']); ?></td>
-                        <td><?php echo htmlspecialchars($user['userrole']); ?></td>
-                        <td><?php echo date('M d, Y', strtotime($user['date_created'])); ?></td>
-                        <td>
-                            <div class="action-buttons">
-                                <button class="btn btn-update" onclick="location.href='../public/update_user.php?id=<?php echo $user['user_id']; ?>'">
-                                    <i class="fas fa-edit"></i> Update
-                                </button>
-                                <button class="btn btn-delete" onclick="if(confirm('Are you sure you want to delete this user?')) location.href='../public/delete_user.php?id=<?php echo $user['user_id']; ?>'">
-                                    <i class="fas fa-trash-alt"></i> Delete
-                                </button>
-                                <button class="btn btn-view" onclick="location.href='../public/view_user.php?user_id=<?php echo $user['user_id']; ?>'">
-                                    <i class="fas fa-eye"></i> View
-                                </button>
-                                <button class="btn btn-warning" onclick="if(confirm('Are you sure you want to reset the password for this user to default (123456)?')) location.href='../public/reset_user_password.php?id=<?php echo $user['user_id']; ?>'">
-                                    <i class="fas fa-sync-alt"></i> Reset
-                                </button>
-                            </div>
-                        </td>
+                        <th style="width:3%">ID</th>
+                        <th style="width:6%">Username</th>
+                        <th style="width:6%">First Name</th>
+                        <th style="width:6%">Last Name</th>
+                        <th style="width:8%">Full Name</th>
+                        <th style="width:6%">Email</th>
+                        <th style="width:4%">Gender</th>
+                        <th style="width:8%">Mobile</th>
+                        <th style="width:8%">Role</th>
+                        <th style="width:6%">Status</th>
+                        <th style="width:8%">Created</th>
+                        <th style="width:37%">Actions</th>
                     </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php if (empty($users)): ?>
+                        <tr>
+                            <td colspan="12" style="text-align:center;padding:40px;color:#6c757d">
+                                <i class="fas fa-inbox fa-3x mb-3" style="display:block;opacity:.3"></i>
+                                <?php if(!empty($search)): ?>
+                                    No users found matching "<?= htmlspecialchars($search) ?>"
+                                <?php else: ?>
+                                    No users found in the system
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($users as $user):
+                            $is_active = isset($user['is_active']) ? $user['is_active'] : 1;
+                        ?>
+                            <tr style="<?= $is_active == 0 ? 'opacity:0.6;background:#f8f9fa' : '' ?>">
+                                <td><strong><?= htmlspecialchars($user['user_id']) ?></strong></td>
+                                <td><?= htmlspecialchars($user['username']) ?></td>
+                                <td><?= htmlspecialchars($user['first_name']) ?></td>
+                                <td><?= htmlspecialchars($user['last_name']) ?></td>
+                                <td><?= htmlspecialchars($user['full_name']) ?></td>
+                                <td><?= htmlspecialchars($user['email']) ?></td>
+                                <td>
+                                    <?php if($user['gender'] == 'Male'): ?>
+                                        <i class="fas fa-mars text-primary"></i>
+                                    <?php elseif($user['gender'] == 'Female'): ?>
+                                        <i class="fas fa-venus text-danger"></i>
+                                    <?php else: ?>
+                                        <i class="fas fa-genderless text-secondary"></i>
+                                    <?php endif; ?>
+                                    <?= htmlspecialchars($user['gender']) ?>
+                                </td>
+                                <td><?= htmlspecialchars($user['mobile']) ?></td>
+                                <td>
+                                    <span class="badge" style="background:<?= $user['userrole'] == 'Admin' ? 'var(--danger)' : 'var(--primary)' ?>;color:#fff;padding:4px 8px;border-radius:12px;font-size:.75rem">
+                                        <?= htmlspecialchars($user['userrole']) ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <?php if($is_active == 1): ?>
+                                        <span class="badge" style="background:var(--success);color:#fff;padding:4px 8px;border-radius:12px;font-size:.75rem">
+                                            <i class="fas fa-check-circle"></i> Active
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="badge" style="background:var(--danger);color:#fff;padding:4px 8px;border-radius:12px;font-size:.75rem">
+                                            <i class="fas fa-times-circle"></i> Disabled
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?= date('M d, Y', strtotime($user['date_created'])) ?></td>
+                                <td>
+                                    <div class="action-btns">
+                                        <a href="../public/view_user2.php?user_id=<?= $user['user_id'] ?>"
+                                           class="btn-sm btn-view" title="View User">
+                                            <i class="fas fa-eye"></i>View
+                                        </a>
+                                        <a href="../public/update_user.php?id=<?= $user['user_id'] ?>"
+                                           class="btn-sm btn-update" title="Update User">
+                                            <i class="fas fa-edit"></i>Edit
+                                        </a>
+                                        <a href="../public/reset_user_password.php?id=<?= $user['user_id'] ?>"
+                                           onclick="return confirm('Reset password to default (123456)?')"
+                                           class="btn-sm btn-reset" title="Reset Password">
+                                            <i class="fas fa-key"></i>Reset
+                                        </a>
+                                        <?php if($is_active == 1): ?>
+                                            <a href="../public/toggle_user_status.php?id=<?= $user['user_id'] ?>&action=disable"
+                                               onclick="return confirm('Are you sure you want to disable this user?')"
+                                               class="btn-sm btn-warning" title="Disable User" style="background:#f39c12;color:#fff">
+                                                <i class="fas fa-ban"></i>Disable
+                                            </a>
+                                        <?php else: ?>
+                                            <a href="../public/toggle_user_status.php?id=<?= $user['user_id'] ?>&action=enable"
+                                               onclick="return confirm('Are you sure you want to enable this user?')"
+                                               class="btn-sm" title="Enable User" style="background:#27ae60;color:#fff">
+                                                <i class="fas fa-check"></i>Enable
+                                            </a>
+                                        <?php endif; ?>
+                                        <a href="../public/delete_user.php?id=<?= $user['user_id'] ?>"
+                                           onclick="return confirm('Are you sure you want to delete this user?')"
+                                           class="btn-sm btn-delete" title="Delete User">
+                                            <i class="fas fa-trash-alt"></i>Delete
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <?php if (!empty($users)): ?>
+            <div class="mt-3 text-muted">
+                <small><i class="fas fa-info-circle me-1"></i>Showing <?= count($users) ?> user(s)</small>
+            </div>
+        <?php endif; ?>
     </div>
 
-    <script src="../assets/js/bootstrap.bundle.js"></script>
     <script src="../assets/js/bootstrap.bundle.min.js"></script>
     <script>
-    // Function to export table data to Excel
-        function exportToExcel() {
-            var table = document.getElementsByTagName("table")[0];
-            var html = table.outerHTML;
-
-            // Format HTML for Excel
-            var uri = 'data:application/vnd.ms-excel,' + encodeURIComponent(html);
-
-            // Create temporary link element and trigger download
-            var link = document.createElement("a");
-            link.href = uri;
-            link.style = "visibility:hidden";
-            link.download = "data.xls";
-
+        function exportToExcel(){
+            const table=document.querySelector("table").cloneNode(true);
+            const actionCells=table.querySelectorAll("th:last-child,td:last-child");
+            actionCells.forEach(cell=>cell.remove());
+            const html=table.outerHTML;
+            const uri='data:application/vnd.ms-excel,'+encodeURIComponent(html);
+            const link=document.createElement("a");
+            link.href=uri;
+            link.download="users_list_"+new Date().toISOString().split('T')[0]+".xls";
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -332,5 +283,3 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
     </script>
 </body>
 </html>
-
-

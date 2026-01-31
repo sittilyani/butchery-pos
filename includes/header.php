@@ -191,8 +191,8 @@ if ($isLoggedIn) {
                             <a href="#" class="dropdown-toggle">Stock Management</a>
                             <div class="dropdown-content">
                                 <a href="../products/add_stocks.php">Add Stocks</a>
-                                <a href="../products/view_stocks.php">View Products</a>
-                                <a href="../products/viewstocks_sum.php">View Inventory</a>
+                                <a href="../products/index.php">View Products</a>
+                                <a href="../products/view_stocks.php">View Stocks</a>
                                 <a href="../products/stock_taking.php">Stock Taking</a>
                                 <a href="../products/add_supplier.php">Add Supplier</a>
                                 <a href="../products/view_suppliers.php">View Suppliers</a>
@@ -207,7 +207,6 @@ if ($isLoggedIn) {
                                 <a href="../categories/index.php">Add Categories</a>
                                 <a href="../products/index.php">Add Products</a>
                                 <a href="../staff/staffslist.php">View Staff</a>
-                                <a href="../suppliers/index.php">View Suppliers</a>
                             </div>
                         </li>
                         <?php endif; ?>
